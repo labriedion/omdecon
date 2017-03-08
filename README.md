@@ -1,2 +1,3 @@
-# omero
-My OMERO scripts
+# Omdecon - Deconvolution on the OMERO server
+
+Installation instructions to follow.
