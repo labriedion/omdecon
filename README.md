@@ -1,3 +1,3 @@
-# Omdecon - Deconvolution on the OMERO server
+# omdecon // deconvolution on the OMERO server
 ![img](omdecon.png)
 Installation instructions to follow.
