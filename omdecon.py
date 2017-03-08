@@ -447,7 +447,7 @@ def runAsScript():
 		description="Input '0' if not using this channel"),
 		
 		
-		version="0.1.0",
+		version="1.0.0",
 		authors=["Etienne Labrie-Dion"],
 		institutions=["Douglas Hospital Research Center, McGill University, Montreal"],
 		contact="etienne.labrie-dion@douglas.mcgill.ca",		
