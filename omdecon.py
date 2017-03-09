@@ -12,6 +12,9 @@ from omero.rtypes import *
 
 from PIL import Image
 import numpy as np
+import astropy.io.fits as fits
+from astropy.io.fits.hdu.image import PrimaryHDU
+
 
 #AIDA 1.41. For now Omdecon is not using the 3D capabilities of AIDA as 3D tif reading is broken in v1.41.
 import aida.AIDA as AIDA
@@ -226,10 +229,13 @@ def get_PSF(stack, imagepath, conn, scriptParams):
 			image_psf = np.delete(image_psf,1,1) 
 			
 			#Donwload the PSF. This is the same operation as the download function
+			#Convert to FITS and save
 			pixels = image_psf.astype(np.float32)
-			tiff = Image.fromarray(pixels)
-			deconv_path = os.path.join(imagepath, "%s%s_C%s_%03d_%03d.tif" % (imageId,"PSF",c,0,0))
-			tiff.save(deconv_path)
+			hdu = PrimaryHDU(pixels)
+			hdulist = fits.HDUList([hdu])
+			deconv_path = os.path.join(imagepath, "%s%s_C%s_%03d_%03d.fits" % (imageId,"PSF",c,0,0))
+			hdulist.writeto(deconv_path)
+
 			
 def download(stack, imageId, background, imagepath, roiConn = None):
 	#Download the Images to the temp folder
@@ -275,8 +281,8 @@ def download(stack, imageId, background, imagepath, roiConn = None):
 		plane = plane.astype(np.float32) #AIDA needs 32bit images
 		
 		if roiConn is not None:
-			#measure background: mean background + 0.5 standard deviation for each plane.
-			background = int(plane[roiX:roiX+roiH,roiY:roiY+roiW].mean() + plane[roiX:roiX+roiH,roiY:roiY+roiW].std()/2)
+			#measure background: mean background
+			background = int(plane[roiX:roiX+roiH,roiY:roiY+roiW].mean())
 			if background == 0: #handle the cases where a region is blank
 				background = int(plane.mean()-plane.std()) #remove the mean of the whole image minus one std
 				if background == 0: #if the whole image is blank, background is 1
@@ -284,10 +290,11 @@ def download(stack, imageId, background, imagepath, roiConn = None):
 		
 		plane = np.subtract(plane, background) #AIDA needs negative pixel values for the background
 		
-		#Convert to TIF and save
-		tiff = Image.fromarray(plane, mode='F')
-		deconv_path = os.path.join(imagepath, "%s_C%s_%03d_%03d.tif" % (imageId,zctList[index][1],zctList[index][2],zctList[index][0]))
-		tiff.save(deconv_path, "TIFF") #save in the temp directory
+		#Convert to FITS and save
+		hdu = PrimaryHDU(plane)
+		hdulist = fits.HDUList([hdu])
+		deconv_path = os.path.join(imagepath, "%s_C%s_%03d_%03d.fits" % (imageId,zctList[index][1],zctList[index][2],zctList[index][0]))
+		hdulist.writeto(deconv_path)
 
 def run_AIDA(images,imagepath):
 
