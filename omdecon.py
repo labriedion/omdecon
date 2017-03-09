@@ -241,7 +241,7 @@ def download(stack, imageId, background, imagepath, roiConn = None):
 	zctList = [] 
 	
 	if stack.getPrimaryPixels().getSizeX() != stack.getPrimaryPixels().getSizeY():
-		raise AttributeError("The image %s is not square. Please supply a square image only." %imageId)
+		raise("The image %s is not square. Please supply a square image only." %imageId)
 	
 	#If automatic background measurement is used
 	if roiConn is not None:
