@@ -30,12 +30,6 @@ def process(conn, scriptParams):
 	#Read the script parameters
 	datatype = scriptParams["Data_Type"]
 	ids = scriptParams["IDs"]
-	background = scriptParams["Background_value_to_subtract"] 
-	if scriptParams["Automatically_measure_background_from_ROI"]:
-		rois = conn.getRoiService()
-	else:
-		rois = None
-	
 	
 	#Connect to OMERO and find the objects
 	obs = conn.getObjects(datatype, ids)
@@ -64,7 +58,7 @@ def process(conn, scriptParams):
 		for i in images:
 			imageId = i.getId()
 			sizeC = i.getSizeC()
-			download(i, imageId, background, imagepath, rois)
+			download(i, imageId, imagepath)
 			get_PSF(i, imagepath, conn, scriptParams)
 		
 		#Deconvolve all images
@@ -107,7 +101,7 @@ def get_PSF(stack, imagepath, conn, scriptParams):
 			obs = conn.getObject("Image", psfId)
 		except AttributeError:
 			raise("The image supplied for the PSF (image %s) is not valid." %psfId)
-		download(obs,str(imageId)+"PSF", 0, imagepath)
+		download(obs,str(imageId)+"PSF", imagepath)
 	
 	
 	else:
@@ -236,8 +230,7 @@ def get_PSF(stack, imagepath, conn, scriptParams):
 			deconv_path = os.path.join(imagepath, "%s%s_C%s_%03d_%03d.fits" % (imageId,"PSF",c,0,0))
 			hdulist.writeto(deconv_path)
 
-			
-def download(stack, imageId, background, imagepath, roiConn = None):
+def download(stack, imageId, imagepath):
 	#Download the Images to the temp folder
 	print " Downloading %s: %s" % (imageId,stack.name)
 	
@@ -248,25 +241,6 @@ def download(stack, imageId, background, imagepath, roiConn = None):
 	
 	if stack.getPrimaryPixels().getSizeX() != stack.getPrimaryPixels().getSizeY():
 		raise("The image %s is not square. Please supply a square image only." %imageId)
-	
-	#If automatic background measurement is used
-	if roiConn is not None:
-		try:
-			result = roiConn.findByImage(imageId,None)
-		except AttributeError:
-			raise ("Couldn't find an ROI for background measurement on image %s. Please trace an ROI or use the manual background setting" %imageId)
-		
-		shape = result.rois[0].copyShapes()[0]  #Only the first ROI detected is used. It can be on any plane, only the position is important. 
-												#If the ROI is on a different plane, make sure it doesn't overlap important structures on the first plane.
-		#find the position of the ROI
-		if shape.__class__.__name__ == 'RectangleI':
-			roiX = int(shape.getX().getValue()) #need integer to use these as indexes
-			roiY = int(shape.getY().getValue())
-			roiW = int(shape.getWidth().getValue())
-			roiH = int(shape.getHeight().getValue())
-		else:
-			raise AttributeError("The first ROI for background measurement on image %s is not rectangular. Either re-trace a new ROI or use the manual background setting." %imageId)
-
 			
 	for z in range(sizeZ): #build the zctList as described in the OMERO documentation
 		for c in range(sizeC):
@@ -280,13 +254,13 @@ def download(stack, imageId, background, imagepath, roiConn = None):
 		
 		plane = plane.astype(np.float32) #AIDA needs 32bit images
 		
-		if roiConn is not None:
-			#measure background: mean background
-			background = int(plane[roiX:roiX+roiH,roiY:roiY+roiW].mean())
-			if background == 0: #handle the cases where a region is blank
-				background = int(plane.mean()-plane.std()) #remove the mean of the whole image minus one std
-				if background == 0: #if the whole image is blank, background is 1
-					background = 1
+		if "PSF" not in str(imageId) :
+			#measure background if not a PSF image
+			background = int(plane.min()+plane.std()*.25)
+			if background == 0: #if the whole image is blank, background is 1
+				background = 1
+		else:
+			background = 0
 		
 		plane = np.subtract(plane, background) #AIDA needs negative pixel values for the background
 		
@@ -335,6 +309,7 @@ def upload_to_OMERO(stack, imagepath, conn):
 	sizeZ = stack.getSizeZ()
 	sizeC = stack.getSizeC()
 	sizeT = stack.getSizeT()
+	pixelType = stack.getPixelsType()
 	clist = range(sizeC)
 	zctList = [] 
 	newName = imageName[:-4] + "_Deconv" + imageName[-4:]
@@ -350,9 +325,9 @@ def upload_to_OMERO(stack, imagepath, conn):
 	def planeGen():
 		for i in zctList:
 			find_image = glob.glob(deconvoluted_path[i[1]] + "/Robj*%s_C%s_%03d_%03d*" % (imageId,i[1],i[2],i[0]))[0]
-			open_image = Image.open(find_image)
-			open_image.load()
-			plane = np.asarray(open_image)
+			open_image = fits.open(find_image)
+			plane = open_image[0].data
+			plane = plane.astype(pixelType)
 			yield plane
 	
 	print "Uploading deconvoluted Image '%s'" % newName
@@ -374,8 +349,8 @@ def runAsScript():
 	
 	psfTypes = [rstring('Measured PSF'), rstring('Manual theoretical PSF'), rstring('Automatic theoretical PSF')]
 	
-	client = scripts.client('Omdecon',
-	"""Omdecon: deconvolution on the OMERO server.
+	client = scripts.client('omdecon',
+	"""omdecon: deconvolution on the OMERO server.
 	
 	Omdecon uses AIDA, the Adaptative Image Deconvolution Algorithm, to deconvolve images. 
 	More info: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3166524/
@@ -387,12 +362,10 @@ def runAsScript():
 	
 	READ BEFORE YOU USE OMDECON:
 		1- Omdecon only works with square images (i.e. 512x512, 600x600).
-		2- The automatic background subtraction requires a single rectangular ROI. 
-		   Make sure this ROI doesn't overlap any important feature on any plane or frame.
-		3- The automatic theoretical PSF calculation requires the following metadata:
+		2- The automatic theoretical PSF calculation requires the following metadata:
 		   -Objective, Numerical Aperture, Excitation and Emission for all channels and Pixel Calibration.
-		4- You need to input the right number of channels when setting the PSF manually.
-		5- Images are saved in the same dataset with "_Deconv" added to the name.
+		3- You need to input the right number of channels when setting the PSF manually.
+		4- Images are saved in the same dataset with "_Deconv" added to the name.
 	
 	""",
 		
@@ -402,62 +375,53 @@ def runAsScript():
 		scripts.List("IDs", optional=False, grouping="1.1",
 		description = "List of images to deconvolve.").ofType(rlong(0)),
 				
-		scripts.String("Background", grouping = "2",
-		description="Background", values=None, default=None),
-		
-		scripts.Int("Background_value_to_subtract", optional=False, grouping="2.1",
-		description = "Manually supply the background to subtract.", default=0),
-		
-		scripts.Bool("Automatically_measure_background_from_ROI", grouping="2.2",
-		description = "Trace a rectangular ROI to automatically perform background measurement.", default=False),
-		
-		scripts.String("PSF Configuration", grouping = "3",
+		scripts.String("PSF Configuration", grouping = "2",
 		description="PSF settings", values=None, default=None),
 		
-		scripts.String("Type_of_PSF", grouping = "3.1",
+		scripts.String("Type_of_PSF", grouping = "2.1",
 		description="Choose the type of PSF you want to use.", values=psfTypes, default=rstring('Measured PSF')),
 		
-		scripts.Long("Measured_PSF_Image", optional=True, grouping="3.2",
+		scripts.Long("Measured_PSF_Image", optional=True, grouping="2.2",
 		description="Input '0' to calculate the theoretical PSF", default=0),
 		
-		scripts.String("Manual settings for theoretical PSF (ignored for automatic)", grouping = "4",
+		scripts.String("Manual settings for theoretical PSF (ignored for automatic)", grouping = "3",
 		description="Supply the parameters here to generate a theoretical PSF with manual settings", values=None, default=None),
 		
-		scripts.String("Fluorescence_Microscopy_", grouping="4.01",
+		scripts.String("Fluorescence_Microscopy_", grouping="3.01",
 		description="Choose the type of fluorescence microscopy used", values=microscopyTypes, default=rstring('CONFOCAL')),
 		
-		scripts.String("Imaging_Medium_________", grouping="4.02",
+		scripts.String("Imaging_Medium_________", grouping="3.02",
 		description="Select the media used for imaging", values=immersionTypes, default=rstring('Oil')),
 		
-		scripts.Float("Objective_NA_____________", optional=False, grouping="4.03",
+		scripts.Float("Objective_NA_____________", optional=False, grouping="3.03",
 		description="Supply the numerical aperture of the objective", default=1.42),
 		
-		scripts.Float("Pixel_Size_in_microns", optional=False, grouping="4.04",
+		scripts.Float("Pixel_Size_in_microns", optional=False, grouping="3.04",
 		description="Enter the size of your pixels", default=0.05),
 		
-		scripts.Float("Confocal_Pinhole______", optional=False, grouping="4.05",
+		scripts.Float("Confocal_Pinhole______", optional=False, grouping="3.05",
 		description="Enter the pinhole radius for confocal microscopy", default=0.55),
 		
-		scripts.Int("_____Channel_1_-_Excitation",default=488, grouping="5.1", 
+		scripts.Int("_____Channel_1_-_Excitation",default=488, grouping="4.1", 
 		description="Input '0' if not using this channel"),
 		
-		scripts.Int("_____Channel_1_-_Emission__",default=510, grouping="5.2", 
+		scripts.Int("_____Channel_1_-_Emission__",default=510, grouping="4.2", 
 		description="Input '0' if not using this channel"),
 			
-		scripts.Int("_____Channel_2_-_Excitation",default=0, grouping="5.3", 
+		scripts.Int("_____Channel_2_-_Excitation",default=0, grouping="4.3", 
 		description="Input '0' if not using this channel"),
 		
-		scripts.Int("_____Channel_2_-_Emission__",default=0, grouping="5.4", 
+		scripts.Int("_____Channel_2_-_Emission__",default=0, grouping="4.4", 
 		description="Input '0' if not using this channel"),		
 
-		scripts.Int("_____Channel_3_-_Excitation",default=0, grouping="5.5", 
+		scripts.Int("_____Channel_3_-_Excitation",default=0, grouping="4.5", 
 		description="Input '0' if not using this channel"),
 		
-		scripts.Int("_____Channel_3_-_Emission__",default=0, grouping="5.6", 
+		scripts.Int("_____Channel_3_-_Emission__",default=0, grouping="4.6", 
 		description="Input '0' if not using this channel"),
 		
 		
-		version="1.0.1",
+		version="1.1.0",
 		authors=["Etienne Labrie-Dion"],
 		institutions=["Douglas Hospital Research Center, McGill University, Montreal"],
 		contact="etienne.labrie-dion@douglas.mcgill.ca",		
