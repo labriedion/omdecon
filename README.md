@@ -12,6 +12,6 @@ As an added convenience, I also included a simple way to produce theoretical poi
   - Numerical Aperture
   - Channel excitation and emission
 
-![omdecon interface](/images/omdecon_interface.png)
+![omdecon interface](omdecon_interface.png)
 
 Installation instructions to follow.
