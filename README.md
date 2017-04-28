@@ -1,6 +1,6 @@
 # omdecon // image deconvolution on the OMERO server
-![img](omdecon.png)
-![img](omdecon-wide.gif "Deconvolution example in neurons, myelin in green and connexin in red. Image from Arnaud Tanti. Scale bar =  5um")
+![img](images/omdecon.png)
+![img](images/omdecon-wide.gif "Deconvolution example in neurons, myelin in green and connexin in red. Image from Arnaud Tanti. Scale bar =  5um")
 
 <br><br><br>
 omdecon is a simple image processing tool. It runs a state-of-the-art open-source image denoising method, **[AIDA, the Adaptative Image Deconvolution Algorithm](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3166524/)** over the [OMERO server](http://www.openmicroscopy.org/site/products/omero).
@@ -14,6 +14,6 @@ As an added convenience, I also included a simple way to produce theoretical poi
   - Numerical Aperture
   - Channel excitation and emission
 
-![omdecon interface](omdecon_interface.png)
+![omdecon interface](images/omdecon_interface.png)
 
 Installation instructions to follow.
