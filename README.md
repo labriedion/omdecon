@@ -2,7 +2,7 @@
 ![img](omdecon.png)
 ![img](omdecon-wide.gif "Deconvolution example in neurons, myelin in green and connexin in red. Image from Arnaud Tanti. Scale bar =  5um")
 
-
+<br><br><br>
 omdecon is a simple image processing tool. It runs a state-of-the-art open-source image denoising method, **[AIDA, the Adaptative Image Deconvolution Algorithm](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3166524/)** over the [OMERO server](http://www.openmicroscopy.org/site/products/omero).
 
 As an added convenience, I also included a simple way to produce theoretical point-like objects, or PSFs, using Christoph Gohlke's **[PSF module](http://www.lfd.uci.edu/~gohlke/code/psf.py.html)**. There's two different ways to use this module through omdecon:
